@@ -3,69 +3,56 @@
 
 #include "Configuration.h"
 
-#define LANGUAGE_CONCAT(M)       #M
-#define GENERATE_LANGUAGE_INCLUDE(M)  LANGUAGE_CONCAT(language_##M.h)
-
-
 // NOTE: IF YOU CHANGE LANGUAGE FILES OR MERGE A FILE WITH CHANGES
 //
 //   ==> ALWAYS TRY TO COMPILE MARLIN WITH/WITHOUT "ULTIPANEL" / "ULTRALCD" / "SDSUPPORT" #define IN "Configuration.h"
-//   ==> ALSO TRY ALL AVAILABLE LANGUAGE OPTIONS
+//   ==> ALSO TRY ALL AVAILABLE "LANGUAGE_CHOICE" OPTIONS
 // See also documentation/LCDLanguageFont.md
 
 // Languages
-// en       English
-// pl       Polish
-// fr       French
-// de       German
-// es       Spanish
-// ru       Russian
-// bg       Bulgarian
-// it       Italian
-// pt       Portuguese
-// pt-br    Portuguese (Brazil)
-// fi       Finnish
-// an       Aragonese
-// nl       Dutch
-// gl       Galician
-// ca       Catalan
-// eu       Basque-Euskera
-// kana     Japanese
-// kana_utf Japanese
-// cn       Chinese
-// cz       Czech
+// 1  English  // Language base
+// 2  Polish
+// 3  French
+// 4  German
+// 5  Spanish
+// 6  Russian
+// 7  Italian
+// 8  Portuguese
+// 9  Finnish
+// 10 Aragonese
+// 11 Dutch
+// 12 Catalan
+// 13 Basque-Euskera
+// 14 Portuguese (Brazil)
 
-// fallback if no language is set, don't change
-#ifndef LANGUAGE_INCLUDE
-  #define LANGUAGE_INCLUDE GENERATE_LANGUAGE_INCLUDE(en)
-#endif
-
-#if ENABLED(USE_AUTOMATIC_VERSIONING)
-  #include "_Version.h"
-#else
-  #include "Default_Version.h"
+#ifndef LANGUAGE_CHOICE
+  #define LANGUAGE_CHOICE 7  // Pick your language from the list above
 #endif
 
 #define PROTOCOL_VERSION "1.0"
 
 #if MB(ULTIMAKER)|| MB(ULTIMAKER_OLD)|| MB(ULTIMAIN_2)
   #define MACHINE_NAME "Ultimaker"
-  #define SOURCE_CODE_URL "https://github.com/Ultimaker/Marlin"
+  #define FIRMWARE_URL "http://firmware.ultimaker.com"
 #elif MB(RUMBA)
   #define MACHINE_NAME "Rumba"
 #elif MB(3DRAG)
   #define MACHINE_NAME "3Drag"
-  #define SOURCE_CODE_URL "http://3dprint.elettronicain.it/"
+  #define FIRMWARE_URL "http://3dprint.elettronicain.it/"
 #elif MB(K8200)
   #define MACHINE_NAME "K8200"
-  #define SOURCE_CODE_URL "https://github.com/CONSULitAS/Marlin-K8200"
 #elif MB(5DPRINT)
   #define MACHINE_NAME "Makibox"
 #elif MB(SAV_MKI)
   #define MACHINE_NAME "SAV MkI"
-  #define SOURCE_CODE_URL "https://github.com/fmalpartida/Marlin/tree/SAV-MkI-config"
-#elif !defined(MACHINE_NAME)
-  #define MACHINE_NAME "3D Printer"
+  #define FIRMWARE_URL "https://github.com/fmalpartida/Marlin/tree/SAV-MkI-config"
+#else // Default firmware set to Mendel
+  #define MACHINE_NAME "Mendel"
+#endif
+
+#ifdef CUSTOM_MENDEL_NAME
+  #error CUSTOM_MENDEL_NAME deprecated - use CUSTOM_MACHINE_NAME
+  #define CUSTOM_MACHINE_NAME CUSTOM_MENDEL_NAME
 #endif
 
 #ifdef CUSTOM_MACHINE_NAME
@@ -73,16 +60,16 @@
   #define MACHINE_NAME CUSTOM_MACHINE_NAME
 #endif
 
-#ifndef SOURCE_CODE_URL
-  #define SOURCE_CODE_URL "https://github.com/MarlinFirmware/Marlin"
+#ifndef FIRMWARE_URL
+  #define FIRMWARE_URL "https://github.com/MagoKimbra/MarlinKimbra"
 #endif
 
-#ifndef DETAILED_BUILD_VERSION
-  #error BUILD_VERSION Information must be specified
+#ifndef BUILD_VERSION
+  #define BUILD_VERSION "V4;"
 #endif
 
-#ifndef UUID
-  #define UUID "00000000-0000-0000-0000-000000000000"
+#ifndef MACHINE_UUID
+  #define MACHINE_UUID "00000000-0000-0000-0000-000000000000"
 #endif
 
 
@@ -95,11 +82,11 @@
   /* nothing here yet */
 
 // Common serial messages
-#define MSG_MARLIN "Marlin"
+#define MSG_MARLIN "MarlinKimbra"
 
 // Serial Console Messages (do not translate those!)
 
-#define MSG_Enqueueing                      "enqueueing \""
+#define MSG_ENQUEUEING                      "enqueueing \""
 #define MSG_POWERUP                         "PowerUp"
 #define MSG_EXTERNAL_RESET                  " External Reset"
 #define MSG_BROWNOUT_RESET                  " Brown out Reset"
@@ -108,9 +95,7 @@
 #define MSG_AUTHOR                          " | Author: "
 #define MSG_CONFIGURATION_VER               " Last Updated: "
 #define MSG_FREE_MEMORY                     " Free Memory: "
-#define MSG_PLANNER_BUFFER_BYTES            "  PlannerBufferBytes: "
-#define MSG_OK                              "ok"
-#define MSG_WAIT                            "wait"
+#define MSG_PLANNER_BUFFER_BYTES            " PlannerBufferBytes: "
 #define MSG_FILE_SAVED                      "Done saving file."
 #define MSG_ERR_LINE_NO                     "Line Number is not Last Line Number+1, Last Line: "
 #define MSG_ERR_CHECKSUM_MISMATCH           "checksum mismatch, Last Line: "
@@ -121,14 +106,25 @@
 #define MSG_END_FILE_LIST                   "End file list"
 #define MSG_INVALID_EXTRUDER                "Invalid extruder"
 #define MSG_INVALID_SOLENOID                "Invalid solenoid"
+#define MSG_M104_INVALID_EXTRUDER           "M104 " MSG_INVALID_EXTRUDER " "
+#define MSG_M105_INVALID_EXTRUDER           "M105 " MSG_INVALID_EXTRUDER " "
+#define MSG_M109_INVALID_EXTRUDER           "M109 " MSG_INVALID_EXTRUDER " "
+#define MSG_M200_INVALID_EXTRUDER           "M200 " MSG_INVALID_EXTRUDER " "
+#define MSG_M218_INVALID_EXTRUDER           "M218 " MSG_INVALID_EXTRUDER " "
+#define MSG_M221_INVALID_EXTRUDER           "M221 " MSG_INVALID_EXTRUDER " "
 #define MSG_ERR_NO_THERMISTORS              "No thermistors - no temperature"
-#define MSG_M115_REPORT                     "FIRMWARE_NAME:Marlin " DETAILED_BUILD_VERSION " SOURCE_CODE_URL:" SOURCE_CODE_URL " PROTOCOL_VERSION:" PROTOCOL_VERSION " MACHINE_TYPE:" MACHINE_NAME " EXTRUDER_COUNT:" STRINGIFY(EXTRUDERS) " UUID:" UUID "\n"
+#define MSG_HEATING                         "Heating..."
+#define MSG_HEATING_COMPLETE                "Heating done."
+#define MSG_BED_HEATING                     "Bed Heating."
+#define MSG_BED_DONE                        "Bed done."
+#define MSG_M115_REPORT                     "FIRMWARE_NAME:MarlinKimbra " BUILD_VERSION " FIRMWARE_URL:" FIRMWARE_URL " PROTOCOL_VERSION:" PROTOCOL_VERSION " MACHINE_TYPE:" MACHINE_NAME " EXTRUDER_COUNT:" STRINGIFY(EXTRUDERS) " UUID:" MACHINE_UUID "\n"
 #define MSG_COUNT_X                         " Count X: "
 #define MSG_ERR_KILLED                      "Printer halted. kill() called!"
 #define MSG_ERR_STOPPED                     "Printer stopped due to errors. Fix the error and use M999 to restart. (Temperature is reset. Set it after restarting)"
-#define MSG_RESEND                          "Resend: "
 #define MSG_UNKNOWN_COMMAND                 "Unknown command: \""
+#define MSG_ACTIVE_DRIVER                   "Active Driver: "
 #define MSG_ACTIVE_EXTRUDER                 "Active Extruder: "
+#define MSG_ACTIVE_COLOR                    "Active Color: "
 #define MSG_X_MIN                           "x_min: "
 #define MSG_X_MAX                           "x_max: "
 #define MSG_Y_MIN                           "y_min: "
@@ -137,14 +133,15 @@
 #define MSG_Z_MAX                           "z_max: "
 #define MSG_Z2_MAX                          "z2_max: "
 #define MSG_Z_PROBE                         "z_probe: "
-#define MSG_ERR_MATERIAL_INDEX              "M145 S<index> out of range (0-1)"
-#define MSG_ERR_M421_REQUIRES_XYZ           "M421 requires XYZ parameters"
-#define MSG_ERR_MESH_INDEX_OOB              "Mesh XY index is out of bounds"
-#define MSG_ERR_M428_TOO_FAR                "Too far from reference point"
+#define MSG_E_MIN                           "e_min: "
 #define MSG_M119_REPORT                     "Reporting endstop status"
 #define MSG_ENDSTOP_HIT                     "TRIGGERED"
-#define MSG_ENDSTOP_OPEN                    "open"
+#define MSG_ENDSTOP_OPEN                    "NOT TRIGGERED"
 #define MSG_HOTEND_OFFSET                   "Hotend offsets:"
+#define MSG_EMPTY_PLANE                     "Autolevel can only be execute on an actual plane, make sure width and height are not 0!"
+#define MSG_ERR_MATERIAL_INDEX              "M145 S<index> out of range (0-2)"
+#define MSG_FILRUNOUT_PIN                   "filament_runout_pin: "
+#define MSG_ERR_M428_TOO_FAR                "Too far from reference point"
 
 #define MSG_SD_CANT_OPEN_SUBDIR             "Cannot open subdir"
 #define MSG_SD_INIT_FAIL                    "SD init fail"
@@ -161,16 +158,30 @@
 #define MSG_SD_NOT_PRINTING                 "Not SD printing"
 #define MSG_SD_ERR_WRITE_TO_FILE            "error writing to file"
 #define MSG_SD_CANT_ENTER_SUBDIR            "Cannot enter subdir: "
+#define MSG_SD_FILE_DELETED                 "File deleted:"
+#define MSG_SD_SLASH                        "/"
+#define MSG_SD_FILE_DELETION_ERR            "Deletion failed, File: "
+#define MSG_SD_MAX_DEPTH                    "trying to call sub-gcode files with too many levels. MAX level is:"
 
 #define MSG_STEPPER_TOO_HIGH                "Steprate too high: "
 #define MSG_ENDSTOPS_HIT                    "endstops hit: "
 #define MSG_ERR_COLD_EXTRUDE_STOP           " cold extrusion prevented"
 #define MSG_ERR_LONG_EXTRUDE_STOP           " too long extrusion prevented"
-#define MSG_TOO_COLD_FOR_M600               "M600 Hotend too cold to change filament"
 #define MSG_BABYSTEPPING_X                  "Babystepping X"
 #define MSG_BABYSTEPPING_Y                  "Babystepping Y"
 #define MSG_BABYSTEPPING_Z                  "Babystepping Z"
 #define MSG_SERIAL_ERROR_MENU_STRUCTURE     "Error in menu structure"
+#define MSG_MICROSTEP_MS1_MS2                "MS1,MS2 Pins"
+#define MSG_MICROSTEP_X                      "X:"
+#define MSG_MICROSTEP_Y                      "Y:"
+#define MSG_MICROSTEP_Z                      "Z:"
+#define MSG_MICROSTEP_E0                     "E0:"
+#define MSG_MICROSTEP_E1                     "E1:"
+#define MSG_ENDSTOP_X                        " X:"
+#define MSG_ENDSTOP_Y                        " Y:"
+#define MSG_ENDSTOP_Z                        " Z:"
+#define MSG_ENDSTOP_E                        " E:"
+#define MSG_ENDSTOP_ZP                       " ZP:"
 
 #define MSG_ERR_EEPROM_WRITE                "Error writing to EEPROM!"
 
@@ -191,41 +202,75 @@
 #define MSG_KP                              " Kp: "
 #define MSG_KI                              " Ki: "
 #define MSG_KD                              " Kd: "
-#define MSG_B                               "B:"
-#define MSG_T                               "T:"
+#define MSG_B                               " B:"
+#define MSG_T                               " T:"
 #define MSG_AT                              " @:"
-#define MSG_PID_AUTOTUNE_FINISHED           MSG_PID_AUTOTUNE " finished! Put the last Kp, Ki and Kd constants from below into Configuration.h"
-#define MSG_PID_DEBUG                       " PID_DEBUG "
-#define MSG_PID_DEBUG_INPUT                 ": Input "
-#define MSG_PID_DEBUG_OUTPUT                " Output "
-#define MSG_PID_DEBUG_PTERM                 " pTerm "
-#define MSG_PID_DEBUG_ITERM                 " iTerm "
-#define MSG_PID_DEBUG_DTERM                 " dTerm "
-#define MSG_PID_DEBUG_CTERM                 " cTerm "
+#define MSG_PID_AUTOTUNE_FINISHED           MSG_PID_AUTOTUNE " finished! Put the last Kp, Ki and Kd constants from above into Configuration.h or send command M500 for save in EEPROM the new value!"
+
+#define MSG_HEATING_FAILED                  "Heating failed"
+#define MSG_THERMAL_RUNAWAY_STOP            "Thermal Runaway, system stopped! Heater_ID: "
+#define MSG_THERMAL_RUNAWAY_BED             "bed"
+#define MSG_TEMP_READ_ERROR                 "Temp measurement error!"
+#define MSG_TEMP_BED                        "bed"
+#define MSG_EXTRUDER_SWITCHED_OFF           "Extruder switched off. Temperature difference between temp sensors is too high !"
+
 #define MSG_INVALID_EXTRUDER_NUM            " - Invalid extruder number !"
+#define MSG_SWITCHED_OFF_MAX                " switched off. MAXTEMP triggered !!"
+#define MSG_MINTEMP_EXTRUDER_OFF            ": Extruder switched off. MINTEMP triggered !"
+#define MSG_MAXTEMP_EXTRUDER_OFF            ": Extruder" MSG_SWITCHED_OFF_MAX
+#define MSG_MAXTEMP_BED_OFF                 "Heated bed" MSG_SWITCHED_OFF_MAX
 
-#define MSG_HEATER_BED                      "bed"
-#define MSG_STOPPED_HEATER                  ", system stopped! Heater_ID: "
-#define MSG_REDUNDANCY                      "Heater switched off. Temperature difference between temp sensors is too high !"
-#define MSG_T_HEATING_FAILED                "Heating failed"
-#define MSG_T_THERMAL_RUNAWAY               "Thermal Runaway"
-#define MSG_T_MAXTEMP                       "MAXTEMP triggered"
-#define MSG_T_MINTEMP                       "MINTEMP triggered"
+#define MSG_ENDSTOP_XS                      "X"
+#define MSG_ENDSTOP_YS                      "Y"
+#define MSG_ENDSTOP_ZS                      "Z"
+#define MSG_ENDSTOP_ZPS                     "ZP"
+#define MSG_ENDSTOP_ES                      "E"
 
-// Debug
-#define MSG_DEBUG_ECHO                      "DEBUG ECHO ENABLED"
-#define MSG_DEBUG_INFO                      "DEBUG INFO ENABLED"
-#define MSG_DEBUG_ERRORS                    "DEBUG ERRORS ENABLED"
-#define MSG_DEBUG_DRYRUN                    "DEBUG DRYRUN ENABLED"
-#define MSG_DEBUG_LEVELING                  "DEBUG LEVELING ENABLED"
+//watchdog.cpp
+#define MSG_WATCHDOG_RESET                  "Something is wrong, please turn off the printer."
+
+//other
+#define MSG_COMPILED                        "Compiled: "
+#define MSG_ERR_HOMING_DIV                  "The Homing Bump Feedrate Divisor cannot be less than 1"
+#define MSG_BED_LEVELLING_BED               "Bed"
+#define MSG_BED_LEVELLING_X                 " X: "
+#define MSG_BED_LEVELLING_Y                 " Y: "
+#define MSG_BED_LEVELLING_Z                 " Z: "
 
 // LCD Menu Messages
 
-#if DISABLED(DISPLAY_CHARSET_HD44780_JAPAN) && DISABLED(DISPLAY_CHARSET_HD44780_WESTERN) && DISABLED(DISPLAY_CHARSET_HD44780_CYRILLIC)
+#if !(defined( DISPLAY_CHARSET_HD44780_JAPAN ) || defined( DISPLAY_CHARSET_HD44780_WESTERN ) || defined( DISPLAY_CHARSET_HD44780_CYRILLIC ))
   #define DISPLAY_CHARSET_HD44780_JAPAN
 #endif
 
-#include LANGUAGE_INCLUDE
-#include "language_en.h"
+#include "language_en.h" // English
+
+#if LANGUAGE_CHOICE == 2 // Polish
+  #include "language_pl.h"
+#elif LANGUAGE_CHOICE == 3 // French
+  #include "language_fr.h"
+#elif LANGUAGE_CHOICE == 4 // German
+  #include "language_de.h"
+#elif LANGUAGE_CHOICE == 5 // Spanish
+  #include "language_es.h"
+#elif LANGUAGE_CHOICE == 6 // Russian
+  #include "language_ru.h"
+#elif LANGUAGE_CHOICE == 7 // Italian
+  #include "language_it.h"
+#elif LANGUAGE_CHOICE == 8 // Portuguese
+  #include "language_pt.h"
+#elif LANGUAGE_CHOICE == 9 // Finnish
+  #include "language_fi.h"
+#elif LANGUAGE_CHOICE == 10 // Aragonese
+  #include "language_an.h"
+#elif LANGUAGE_CHOICE == 11 // Dutch
+  #include "language_nl.h"
+#elif LANGUAGE_CHOICE == 12 // Catalan
+  #include "language_ca.h"
+#elif LANGUAGE_CHOICE == 13 // Basque-Euskera
+  #include "language_eu.h"
+#elif LANGUAGE_CHOICE == 14 // Portuguese - Brasil
+  #include "language_pt-br.h"
+#endif
 
 #endif //__LANGUAGE_H

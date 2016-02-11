@@ -5,7 +5,7 @@
 #include "temperature.h"
 #include "language.h"
 
-#if ENABLED(SDSUPPORT)
+#ifdef SDSUPPORT
 
 CardReader::CardReader() {
   filesize = 0;
@@ -20,7 +20,6 @@ CardReader::CardReader() {
 
   autostart_stilltocheck = true; //the SD start is delayed, because otherwise the serial cannot answer fast enough to make contact with the host software.
   autostart_index = 0;
-
   //power to SD reader
   #if SDPOWER > -1
     OUT_WRITE(SDPOWER, HIGH);
@@ -40,58 +39,39 @@ char *createFilename(char *buffer, const dir_t &p) { //buffer > 12characters
   return buffer;
 }
 
-/**
- * Dive into a folder and recurse depth-first to perform a pre-set operation lsAction:
- *   LS_Count       - Add +1 to nrFiles for every file within the parent
- *   LS_GetFilename - Get the filename of the file indexed by nrFiles
- *   LS_SerialPrint - Print the full path of each file to serial output
- */
 void CardReader::lsDive(const char *prepend, SdFile parent, const char * const match/*=NULL*/) {
   dir_t p;
   uint8_t cnt = 0;
 
-  // Read the next entry from a directory
   while (parent.readDir(p, longFilename) > 0) {
-
-    // If the entry is a directory and the action is LS_SerialPrint
-    if (DIR_IS_SUBDIR(&p) && lsAction != LS_Count && lsAction != LS_GetFilename) {
-
-      // Get the short name for the item, which we know is a folder
+    if (DIR_IS_SUBDIR(&p) && lsAction != LS_Count && lsAction != LS_GetFilename) { // hence LS_SerialPrint
+      char path[FILENAME_LENGTH*2];
       char lfilename[FILENAME_LENGTH];
       createFilename(lfilename, p);
 
-      // Allocate enough stack space for the full path to a folder, trailing slash, and nul
-      boolean prepend_is_empty = (prepend[0] == '\0');
-      int len = (prepend_is_empty ? 1 : strlen(prepend)) + strlen(lfilename) + 1 + 1;
-      char path[len];
+      path[0] = 0;
+      if (prepend[0] == 0) strcat(path, "/"); //avoid leading / if already in prepend
+      strcat(path, prepend);
+      strcat(path, lfilename);
+      strcat(path, "/");
 
-      // Append the FOLDERNAME12/ to the passed string.
-      // It contains the full path to the "parent" argument.
-      // We now have the full path to the item in this folder.
-      strcpy(path, prepend_is_empty ? "/" : prepend); // root slash if prepend is empty
-      strcat(path, lfilename); // FILENAME_LENGTH-1 characters maximum
-      strcat(path, "/");       // 1 character
+      //Serial.print(path);
 
-      // Serial.print(path);
-
-      // Get a new directory object using the full path
-      // and dive recursively into it.
       SdFile dir;
       if (!dir.open(parent, lfilename, O_READ)) {
         if (lsAction == LS_SerialPrint) {
-          SERIAL_ECHO_START;
-          SERIAL_ECHOLN(MSG_SD_CANT_OPEN_SUBDIR);
-          SERIAL_ECHOLN(lfilename);
+          ECHO_LMV(ER, MSG_SD_CANT_OPEN_SUBDIR, lfilename);
         }
       }
       lsDive(path, dir);
-      // close() is done automatically by destructor of SdFile
+      //close done automatically by destructor of SdFile
     }
     else {
       char pn0 = p.name[0];
       if (pn0 == DIR_NAME_FREE) break;
       if (pn0 == DIR_NAME_DELETED || pn0 == '.') continue;
-      if (longFilename[0] == '.') continue;
+      char lf0 = longFilename[0];
+      if (lf0 == '.') continue;
 
       if (!DIR_IS_FILE_OR_SUBDIR(&p)) continue;
 
@@ -99,27 +79,24 @@ void CardReader::lsDive(const char *prepend, SdFile parent, const char * const m
 
       if (!filenameIsDir && (p.name[8] != 'G' || p.name[9] == '~')) continue;
 
-      switch (lsAction) {
-        case LS_Count:
-          nrFiles++;
-          break;
-        case LS_SerialPrint:
-          createFilename(filename, p);
-          SERIAL_PROTOCOL(prepend);
-          SERIAL_PROTOCOLLN(filename);
-          break;
-        case LS_GetFilename:
-          createFilename(filename, p);
-          if (match != NULL) {
-            if (strcasecmp(match, filename) == 0) return;
-          }
-          else if (cnt == nrFiles) return;
-          cnt++;
-          break;
+      //if (cnt++ != nr) continue;
+      createFilename(filename, p);
+      if (lsAction == LS_SerialPrint) {
+        ECHO_V(prepend);
+        ECHO_EV(filename);
       }
-
+      else if (lsAction == LS_Count) {
+        nrFiles++;
+      }
+      else if (lsAction == LS_GetFilename) {
+        if (match != NULL) {
+          if (strcasecmp(match, filename) == 0) return;
+        }
+        else if (cnt == nrFiles) return;
+        cnt++;
+      }
     }
-  } // while readDir
+  }
 }
 
 void CardReader::ls()  {
@@ -128,76 +105,11 @@ void CardReader::ls()  {
   lsDive("", root);
 }
 
-#if ENABLED(LONG_FILENAME_HOST_SUPPORT)
-
-  /**
-   * Get a long pretty path based on a DOS 8.3 path
-   */
-  void CardReader::printLongPath(char *path) {
-    lsAction = LS_GetFilename;
-
-    int i, pathLen = strlen(path);
-
-    // SERIAL_ECHOPGM("Full Path: "); SERIAL_ECHOLN(path);
-
-    // Zero out slashes to make segments
-    for (i = 0; i < pathLen; i++) if (path[i] == '/') path[i] = '\0';
-
-    SdFile diveDir = root; // start from the root for segment 1
-    for (i = 0; i < pathLen;) {
-
-      if (path[i] == '\0') i++; // move past a single nul
-
-      char *segment = &path[i]; // The segment after most slashes
-
-      // If a segment is empty (extra-slash) then exit
-      if (!*segment) break;
-
-      // Go to the next segment
-      while (path[++i]) { }
-
-      // SERIAL_ECHOPGM("Looking for segment: "); SERIAL_ECHOLN(segment);
-
-      // Find the item, setting the long filename
-      diveDir.rewind();
-      lsDive("", diveDir, segment);
-
-      // Print /LongNamePart to serial output
-      SERIAL_PROTOCOLCHAR('/');
-      SERIAL_PROTOCOL(longFilename[0] ? longFilename : "???");
-
-      // If the filename was printed then that's it
-      if (!filenameIsDir) break;
-
-      // SERIAL_ECHOPGM("Opening dir: "); SERIAL_ECHOLN(segment);
-
-      // Open the sub-item as the new dive parent
-      SdFile dir;
-      if (!dir.open(diveDir, segment, O_READ)) {
-        SERIAL_EOL;
-        SERIAL_ECHO_START;
-        SERIAL_ECHOPGM(MSG_SD_CANT_OPEN_SUBDIR);
-        SERIAL_ECHO(segment);
-        break;
-      }
-
-      diveDir.close();
-      diveDir = dir;
-
-    } // while i<pathLen
-
-    SERIAL_EOL;
-  }
-
-#endif // LONG_FILENAME_HOST_SUPPORT
-
 void CardReader::initsd() {
   cardOK = false;
   if (root.isOpen()) root.close();
 
-  #if ENABLED(SDEXTRASLOW)
-    #define SPI_SPEED SPI_QUARTER_SPEED
-  #elif ENABLED(SDSLOW)
+  #ifdef SDSLOW
     #define SPI_SPEED SPI_HALF_SPEED
   #else
     #define SPI_SPEED SPI_FULL_SPEED
@@ -208,35 +120,29 @@ void CardReader::initsd() {
       && !card.init(SPI_SPEED, LCD_SDSS)
     #endif
   ) {
-    //if (!card.init(SPI_HALF_SPEED,SDSS))
-    SERIAL_ECHO_START;
-    SERIAL_ECHOLNPGM(MSG_SD_INIT_FAIL);
+    ECHO_LM(ER, MSG_SD_INIT_FAIL);
   }
   else if (!volume.init(&card)) {
-    SERIAL_ERROR_START;
-    SERIAL_ERRORLNPGM(MSG_SD_VOL_INIT_FAIL);
+    ECHO_LM(ER, MSG_SD_VOL_INIT_FAIL);
   }
   else if (!root.openRoot(&volume)) {
-    SERIAL_ERROR_START;
-    SERIAL_ERRORLNPGM(MSG_SD_OPENROOT_FAIL);
+    ECHO_LM(ER, MSG_SD_OPENROOT_FAIL);
   }
   else {
     cardOK = true;
-    SERIAL_ECHO_START;
-    SERIAL_ECHOLNPGM(MSG_SD_CARD_OK);
+    ECHO_LM(OK, MSG_SD_CARD_OK);
   }
   workDir = root;
   curDir = &root;
-  /*
-  if (!workDir.openRoot(&volume)) {
-    SERIAL_ECHOLNPGM(MSG_SD_WORKDIR_FAIL);
-  }
-  */
+  
+  /*if (!workDir.openRoot(&volume)) {
+    ECHO_EM(MSG_SD_WORKDIR_FAIL);
+  }*/
 }
 
 void CardReader::setroot() {
   /*if (!workDir.openRoot(&volume)) {
-    SERIAL_ECHOLNPGM(MSG_SD_WORKDIR_FAIL);
+    ECHO_EM(MSG_SD_WORKDIR_FAIL);
   }*/
   workDir = root;
   curDir = &workDir;
@@ -248,8 +154,9 @@ void CardReader::release() {
 }
 
 void CardReader::startFileprint() {
-  if (cardOK)
+  if (cardOK) {
     sdprinting = true;
+  }
 }
 
 void CardReader::pauseSDPrint() {
@@ -266,7 +173,7 @@ void CardReader::getAbsFilename(char *t) {
   *t = '/'; t++; cnt++;
   for (uint8_t i = 0; i < workDirDepth; i++) {
     workDirParents[i].getFilename(t); //SDBaseFile.getfilename!
-    while (*t && cnt < MAXPATHNAMELENGTH) { t++; cnt++; } //crawl counter forward.
+    while(*t && cnt < MAXPATHNAMELENGTH) { t++; cnt++; } //crawl counter forward.
   }
   if (cnt < MAXPATHNAMELENGTH - FILENAME_LENGTH)
     file.getFilename(t);
@@ -274,44 +181,25 @@ void CardReader::getAbsFilename(char *t) {
     t[0] = 0;
 }
 
-void CardReader::openFile(char* name, bool read, bool replace_current/*=true*/) {
+void CardReader::openFile(char* name, bool read, bool replace_current/*=true*/, bool lcd_status/*=true*/) {
   if (!cardOK) return;
   if (file.isOpen()) { //replacing current file by new file, or subfile call
     if (!replace_current) {
       if (file_subcall_ctr > SD_PROCEDURE_DEPTH - 1) {
-        SERIAL_ERROR_START;
-        SERIAL_ERRORPGM("trying to call sub-gcode files with too many levels. MAX level is:");
-        SERIAL_ERRORLN(SD_PROCEDURE_DEPTH);
-        kill(PSTR(MSG_KILLED));
+        ECHO_LMV(ER, MSG_SD_MAX_DEPTH, SD_PROCEDURE_DEPTH);
+        kill();
         return;
       }
-
-      SERIAL_ECHO_START;
-      SERIAL_ECHOPGM("SUBROUTINE CALL target:\"");
-      SERIAL_ECHO(name);
-      SERIAL_ECHOPGM("\" parent:\"");
-
       //store current filename and position
       getAbsFilename(filenames[file_subcall_ctr]);
-
-      SERIAL_ECHO(filenames[file_subcall_ctr]);
-      SERIAL_ECHOPGM("\" pos");
-      SERIAL_ECHOLN(sdpos);
+     
       filespos[file_subcall_ctr] = sdpos;
       file_subcall_ctr++;
-     }
-     else {
-      SERIAL_ECHO_START;
-      SERIAL_ECHOPGM("Now doing file: ");
-      SERIAL_ECHOLN(name);
-     }
-     file.close();
+    }
+    file.close();
   }
   else { //opening fresh file
     file_subcall_ctr = 0; //resetting procedure depth in case user cancels print while in procedure
-    SERIAL_ECHO_START;
-    SERIAL_ECHOPGM("Now fresh file: ");
-    SERIAL_ECHOLN(name);
   }
   sdprinting = false;
 
@@ -322,23 +210,15 @@ void CardReader::openFile(char* name, bool read, bool replace_current/*=true*/) 
   char *dirname_start, *dirname_end;
   if (name[0] == '/') {
     dirname_start = &name[1];
-    while (dirname_start > 0) {
+    while(dirname_start > 0) {
       dirname_end = strchr(dirname_start, '/');
-      //SERIAL_ECHO("start:");SERIAL_ECHOLN((int)(dirname_start - name));
-      //SERIAL_ECHO("end  :");SERIAL_ECHOLN((int)(dirname_end - name));
       if (dirname_end > 0 && dirname_end > dirname_start) {
         char subdirname[FILENAME_LENGTH];
         strncpy(subdirname, dirname_start, dirname_end - dirname_start);
         subdirname[dirname_end - dirname_start] = 0;
-        SERIAL_ECHOLN(subdirname);
         if (!myDir.open(curDir, subdirname, O_READ)) {
-          SERIAL_PROTOCOLPGM(MSG_SD_OPEN_FILE_FAIL);
-          SERIAL_PROTOCOL(subdirname);
-          SERIAL_PROTOCOLCHAR('.');
+          ECHO_LMV(ER, MSG_SD_OPEN_FILE_FAIL, subdirname);
           return;
-        }
-        else {
-          //SERIAL_ECHOLN("dive ok");
         }
 
         curDir = &myDir;
@@ -346,8 +226,6 @@ void CardReader::openFile(char* name, bool read, bool replace_current/*=true*/) 
       }
       else { // the remainder after all /fsa/fdsa/ is the filename
         fname = dirname_start;
-        //SERIAL_ECHOLN("remainder");
-        //SERIAL_ECHOLN(fname);
         break;
       }
     }
@@ -359,33 +237,24 @@ void CardReader::openFile(char* name, bool read, bool replace_current/*=true*/) 
   if (read) {
     if (file.open(curDir, fname, O_READ)) {
       filesize = file.fileSize();
-      SERIAL_PROTOCOLPGM(MSG_SD_FILE_OPENED);
-      SERIAL_PROTOCOL(fname);
-      SERIAL_PROTOCOLPGM(MSG_SD_SIZE);
-      SERIAL_PROTOCOLLN(filesize);
+      ECHO_SMV(OK,MSG_SD_FILE_OPENED, fname);
+      ECHO_EMV(MSG_SD_SIZE, filesize);
       sdpos = 0;
-
-      SERIAL_PROTOCOLLNPGM(MSG_SD_FILE_SELECTED);
       getfilename(0, fname);
-      lcd_setstatus(longFilename[0] ? longFilename : fname);
+      if(lcd_status) lcd_setstatus(longFilename[0] ? longFilename : fname);
     }
     else {
-      SERIAL_PROTOCOLPGM(MSG_SD_OPEN_FILE_FAIL);
-      SERIAL_PROTOCOL(fname);
-      SERIAL_PROTOCOLPGM(".\n");
+      ECHO_LMV(ER,MSG_SD_OPEN_FILE_FAIL,fname);
     }
   }
   else { //write
-    if (!file.open(curDir, fname, O_CREAT | O_APPEND | O_WRITE | O_TRUNC)) {
-      SERIAL_PROTOCOLPGM(MSG_SD_OPEN_FILE_FAIL);
-      SERIAL_PROTOCOL(fname);
-      SERIAL_PROTOCOLPGM(".\n");
+    if (file.open(curDir, fname, O_CREAT | O_APPEND | O_WRITE | O_TRUNC)) {
+      saving = true;
+      ECHO_LMV(OK, MSG_SD_WRITE_TO_FILE, name);
+      if(lcd_status) lcd_setstatus(fname);
     }
     else {
-      saving = true;
-      SERIAL_PROTOCOLPGM(MSG_SD_WRITE_TO_FILE);
-      SERIAL_PROTOCOLLN(name);
-      lcd_setstatus(fname);
+      ECHO_LMV(ER, MSG_SD_OPEN_FILE_FAIL,fname);
     }
   }
 }
@@ -405,21 +274,13 @@ void CardReader::removeFile(char* name) {
     dirname_start = strchr(name, '/') + 1;
     while (dirname_start > 0) {
       dirname_end = strchr(dirname_start, '/');
-      //SERIAL_ECHO("start:");SERIAL_ECHOLN((int)(dirname_start - name));
-      //SERIAL_ECHO("end  :");SERIAL_ECHOLN((int)(dirname_end - name));
       if (dirname_end > 0 && dirname_end > dirname_start) {
         char subdirname[FILENAME_LENGTH];
         strncpy(subdirname, dirname_start, dirname_end - dirname_start);
         subdirname[dirname_end - dirname_start] = 0;
-        SERIAL_ECHOLN(subdirname);
         if (!myDir.open(curDir, subdirname, O_READ)) {
-          SERIAL_PROTOCOLPGM("open failed, File: ");
-          SERIAL_PROTOCOL(subdirname);
-          SERIAL_PROTOCOLCHAR('.');
+          ECHO_LMV(ER, MSG_SD_OPEN_FILE_FAIL, subdirname);
           return;
-        }
-        else {
-          //SERIAL_ECHOLN("dive ok");
         }
 
         curDir = &myDir;
@@ -427,8 +288,6 @@ void CardReader::removeFile(char* name) {
       }
       else { // the remainder after all /fsa/fdsa/ is the filename
         fname = dirname_start;
-        //SERIAL_ECHOLN("remainder");
-        //SERIAL_ECHOLN(fname);
         break;
       }
     }
@@ -438,26 +297,21 @@ void CardReader::removeFile(char* name) {
   }
 
   if (file.remove(curDir, fname)) {
-    SERIAL_PROTOCOLPGM("File deleted:");
-    SERIAL_PROTOCOLLN(fname);
+    ECHO_LMV(OK, MSG_SD_FILE_DELETED, fname);
     sdpos = 0;
   }
   else {
-    SERIAL_PROTOCOLPGM("Deletion failed, File: ");
-    SERIAL_PROTOCOL(fname);
-    SERIAL_PROTOCOLCHAR('.');
+    ECHO_LMV(ER, MSG_SD_FILE_DELETION_ERR,fname);
   }
 }
 
 void CardReader::getStatus() {
   if (cardOK) {
-    SERIAL_PROTOCOLPGM(MSG_SD_PRINTING_BYTE);
-    SERIAL_PROTOCOL(sdpos);
-    SERIAL_PROTOCOLCHAR('/');
-    SERIAL_PROTOCOLLN(filesize);
+    ECHO_SMV(OK, MSG_SD_PRINTING_BYTE, sdpos);
+    ECHO_EMV(MSG_SD_SLASH, filesize);
   }
   else {
-    SERIAL_PROTOCOLLNPGM(MSG_SD_NOT_PRINTING);
+    ECHO_LM(OK, MSG_SD_NOT_PRINTING);
   }
 }
 
@@ -476,8 +330,7 @@ void CardReader::write_command(char *buf) {
   end[3] = '\0';
   file.write(begin);
   if (file.writeError) {
-    SERIAL_ERROR_START;
-    SERIAL_ERRORLNPGM(MSG_SD_ERR_WRITE_TO_FILE);
+    ECHO_LM(ER, MSG_SD_ERR_WRITE_TO_FILE);
   }
 }
 
@@ -492,7 +345,7 @@ void CardReader::checkautostart(bool force) {
     if (!cardOK) return; // fail
   }
 
-  char autoname[10];
+  char autoname[30];
   sprintf_P(autoname, PSTR("auto%i.g"), autostart_index);
   for (int8_t i = 0; i < (int8_t)strlen(autoname); i++) autoname[i] = tolower(autoname[i]);
 
@@ -504,7 +357,7 @@ void CardReader::checkautostart(bool force) {
   while (root.readDir(p, NULL) > 0) {
     for (int8_t i = 0; i < (int8_t)strlen((char*)p.name); i++) p.name[i] = tolower(p.name[i]);
     if (p.name[9] != '~' && strncmp((char*)p.name, autoname, 5) == 0) {
-      char cmd[4 + (FILENAME_LENGTH + 1) * MAX_DIR_DEPTH + 2];
+      char cmd[30];
       sprintf_P(cmd, PSTR("M23 %s"), autoname);
       enqueuecommand(cmd);
       enqueuecommands_P(PSTR("M24"));
@@ -517,7 +370,7 @@ void CardReader::checkautostart(bool force) {
     autostart_index++;
 }
 
-void CardReader::closefile(bool store_location) {
+void CardReader::closeFile(bool store_location) {
   file.sync();
   file.close();
   saving = logging = false;
@@ -525,6 +378,103 @@ void CardReader::closefile(bool store_location) {
   if (store_location) {
     //future: store printer state, filename and position for continuing a stopped print
     // so one can unplug the printer and continue printing the next day.
+  }
+}
+
+/**
+ * File parser for KEY->VALUE format from files
+ *
+ * Author: Simone Primarosa
+ *
+ */
+
+void CardReader::parseKeyLine(char *key, char *value, int &len_k, int &len_v) {
+  if (!cardOK || !isFileOpen()) {
+    key[0] = value[0] = '\0';
+    len_k = len_v = 0;
+    return;
+  }
+  int ln_buf = 0;
+  char ln_char;
+  bool ln_space = false, ln_ignore = false, key_found = false;
+  while(!eof()) {		//READ KEY
+    ln_char = (char)get();
+    if(ln_char == '\n') {
+      ln_buf = 0;
+      ln_ignore = false;  //We've reached a new line try to find a key again
+      continue;
+    }
+    if(ln_ignore) continue;
+    if(ln_char == ' ') {
+      ln_space = true;
+      continue;
+    }
+    if(ln_char == '=') {
+      key[ln_buf] = '\0';
+      len_k = ln_buf;
+      key_found = true;
+      break; //key finded and buffered
+    }
+    if(ln_char == ';' || ln_buf+1 >= len_k || ln_space && ln_buf > 0) { //comments on key is not allowd. Also key len can't be longer than len_k or contain spaces. Stop buffering and try the next line
+      ln_ignore = true;
+      continue;
+    }
+    ln_space = false;
+    key[ln_buf] = ln_char;
+    ln_buf++;
+  }
+  if(!key_found) { //definitly there isn't no more key that can be readed in the file
+    key[0] = value[0] = '\0';
+    len_k = len_v = 0;
+    return;
+  }
+  ln_buf = 0;
+  ln_ignore = false;
+  while(!eof()) {		//READ VALUE
+    ln_char = (char)get();
+	  if(ln_char == '\n') {
+      value[ln_buf] = '\0';
+      len_v = ln_buf;
+      break;	//new line reached, we can stop
+    }
+    if(ln_ignore|| ln_char == ' ' && ln_buf == 0) continue; //ignore also initial spaces of the value
+    if(ln_char == ';' || ln_buf+1 >= len_v) { //comments reached or value len longer than len_v. Stop buffering and go to the next line.
+      ln_ignore = true;
+      continue;
+    }
+    value[ln_buf] = ln_char;
+    ln_buf++;
+  }
+}
+
+void CardReader::unparseKeyLine(const char *key, char *value) {
+  if (!cardOK || !isFileOpen()) return;
+  file.writeError = false;
+  file.write(key);
+  if (file.writeError) {
+    ECHO_LM(ER, MSG_SD_ERR_WRITE_TO_FILE);
+    return;
+  }
+  
+  file.writeError = false;
+  file.write("=");
+  if (file.writeError) {
+    ECHO_LM(ER, MSG_SD_ERR_WRITE_TO_FILE);
+    return;
+  }
+  
+  file.writeError = false;
+  file.write(value);
+  if (file.writeError) {
+    ECHO_LM(ER, MSG_SD_ERR_WRITE_TO_FILE);
+    return;
+  }
+
+  file.writeError = false;
+  file.write("\n");
+  if (file.writeError) {
+    ECHO_LM(ER, MSG_SD_ERR_WRITE_TO_FILE);
+    return;
   }
 }
 
@@ -545,7 +495,6 @@ uint16_t CardReader::getnrfilenames() {
   nrFiles = 0;
   curDir->rewind();
   lsDive("", *curDir);
-  //SERIAL_ECHOLN(nrFiles);
   return nrFiles;
 }
 
@@ -555,24 +504,22 @@ void CardReader::chdir(const char * relpath) {
 
   if (workDir.isOpen()) parent = &workDir;
 
-  if (!newfile.open(*parent, relpath, O_READ)) {
-    SERIAL_ECHO_START;
-    SERIAL_ECHOPGM(MSG_SD_CANT_ENTER_SUBDIR);
-    SERIAL_ECHOLN(relpath);
-  }
-  else {
+  if (newfile.open(*parent, relpath, O_READ)) {
     if (workDirDepth < MAX_DIR_DEPTH) {
-      ++workDirDepth;
+      workDirDepth++;
       for (int d = workDirDepth; d--;) workDirParents[d + 1] = workDirParents[d];
       workDirParents[0] = *parent;
     }
     workDir = newfile;
   }
+  else {
+    ECHO_LMV(ER, MSG_SD_CANT_ENTER_SUBDIR, relpath);
+  }
 }
 
 void CardReader::updir() {
   if (workDirDepth > 0) {
-    --workDirDepth;
+    workDirDepth--;
     workDir = workDirParents[0];
     for (uint16_t d = 0; d < workDirDepth; d++)
       workDirParents[d] = workDirParents[d+1];

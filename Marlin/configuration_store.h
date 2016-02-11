@@ -4,14 +4,16 @@
 #include "Configuration.h"
 
 void Config_ResetDefault();
+void load_lifetime_stats();
+void save_lifetime_stats();
 
-#if DISABLED(DISABLE_M503)
+#ifndef DISABLE_M503
   void Config_PrintSettings(bool forReplay=false);
 #else
   FORCE_INLINE void Config_PrintSettings(bool forReplay=false) {}
 #endif
 
-#if ENABLED(EEPROM_SETTINGS)
+#ifdef EEPROM_SETTINGS
   void Config_StoreSettings();
   void Config_RetrieveSettings();
 #else

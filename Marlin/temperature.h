@@ -19,37 +19,44 @@
 */
 
 #ifndef TEMPERATURE_H
-#define TEMPERATURE_H
+#define TEMPERATURE_H 
 
 #include "Marlin.h"
 #include "planner.h"
-#if ENABLED(PID_ADD_EXTRUSION_RATE)
-  #include "stepper.h"
-#endif
+#include "stepper.h"
+
+// for smoother temperature
+#define MEDIAN_COUNT 10
 
 // public functions
 void tp_init();  //initialize the heating
 void manage_heater(); //it is critical that this is called periodically.
 
-#if ENABLED(FILAMENT_SENSOR)
-  // For converting raw Filament Width to milimeters
-  float analog2widthFil();
+#if HAS_FILAMENT_SENSOR
+  // For converting raw Filament Width to milimeters 
+  float analog2widthFil(); 
 
-  // For converting raw Filament Width to an extrusion ratio
+  // For converting raw Filament Width to an extrusion ratio 
   int widthFil_to_size_ratio();
+#endif
+
+#if HAS_POWER_CONSUMPTION_SENSOR
+  // For converting raw Power Consumption to watt
+  float analog2current();
+  float analog2power();
 #endif
 
 // low level conversion routines
 // do not use these routines and variables outside of temperature.cpp
-extern int target_temperature[4];
+extern int target_temperature[4];  
 extern float current_temperature[4];
-#if ENABLED(SHOW_TEMP_ADC_VALUES)
+#ifdef SHOW_TEMP_ADC_VALUES
   extern int current_temperature_raw[4];
   extern int current_temperature_bed_raw;
 #endif
 extern int target_temperature_bed;
 extern float current_temperature_bed;
-#if ENABLED(TEMP_SENSOR_1_AS_REDUNDANT)
+#ifdef TEMP_SENSOR_1_AS_REDUNDANT
   extern float redundant_temperature;
 #endif
 
@@ -57,61 +64,53 @@ extern float current_temperature_bed;
   extern unsigned char soft_pwm_bed;
 #endif
 
-#if ENABLED(PIDTEMP)
-
-  #if ENABLED(PID_PARAMS_PER_EXTRUDER)
-    extern float Kp[EXTRUDERS], Ki[EXTRUDERS], Kd[EXTRUDERS], Kc[EXTRUDERS]; // one param per extruder
-    #define PID_PARAM(param,e) param[e] // use macro to point to array value
-  #else
-    extern float Kp, Ki, Kd, Kc; // one param per extruder - saves 20 or 36 bytes of ram (inc array pointer)
-    #define PID_PARAM(param, e) param // use macro to point directly to value
-  #endif // PID_PARAMS_PER_EXTRUDER
+#ifdef PIDTEMP
+  extern float Kp[HOTENDS], Ki[HOTENDS], Kd[HOTENDS];
+  #define PID_PARAM(param,e) param[e] // use macro to point to array value
   float scalePID_i(float i);
   float scalePID_d(float d);
   float unscalePID_i(float i);
   float unscalePID_d(float d);
-
+#endif
+#ifdef PIDTEMPBED
+  extern float bedKp,bedKi,bedKd;
 #endif
 
-#if ENABLED(PIDTEMPBED)
-  extern float bedKp, bedKi, bedKd;
-#endif
-
-#if ENABLED(BABYSTEPPING)
+#ifdef BABYSTEPPING
   extern volatile int babystepsTodo[3];
 #endif
-
+  
 //high level conversion routines, for use outside of temperature.cpp
 //inline so that there is no performance decrease.
 //deg=degreeCelsius
+#if HOTENDS <= 1
+  #define HOTEND_ARG 0
+#else
+  #define HOTEND_ARG hotend
+#endif
 
-FORCE_INLINE float degHotend(uint8_t extruder) { return current_temperature[extruder]; }
+FORCE_INLINE float degHotend(uint8_t hotend) { return current_temperature[HOTEND_ARG]; }
 FORCE_INLINE float degBed() { return current_temperature_bed; }
 
-#if ENABLED(SHOW_TEMP_ADC_VALUES)
-FORCE_INLINE float rawHotendTemp(uint8_t extruder) { return current_temperature_raw[extruder]; }
-FORCE_INLINE float rawBedTemp() { return current_temperature_bed_raw; }
+#ifdef SHOW_TEMP_ADC_VALUES
+  FORCE_INLINE float rawHotendTemp(uint8_t hotend) { return current_temperature_raw[HOTEND_ARG]; }
+  FORCE_INLINE float rawBedTemp() { return current_temperature_bed_raw; }
 #endif
 
-FORCE_INLINE float degTargetHotend(uint8_t extruder) { return target_temperature[extruder]; }
+FORCE_INLINE float degTargetHotend(uint8_t hotend) { return target_temperature[HOTEND_ARG]; }
+
 FORCE_INLINE float degTargetBed() { return target_temperature_bed; }
 
-#if ENABLED(THERMAL_PROTECTION_HOTENDS)
-  void start_watching_heater(int e = 0);
-#endif
+FORCE_INLINE void setTargetHotend(const float &celsius, uint8_t hotend) { target_temperature[HOTEND_ARG] = celsius; }
 
-FORCE_INLINE void setTargetHotend(const float& celsius, uint8_t extruder) {
-  target_temperature[extruder] = celsius;
-  #if ENABLED(THERMAL_PROTECTION_HOTENDS)
-    start_watching_heater(extruder);
-  #endif
-}
-FORCE_INLINE void setTargetBed(const float& celsius) { target_temperature_bed = celsius; }
+FORCE_INLINE void setTargetBed(const float &celsius) { target_temperature_bed = celsius; }
 
-FORCE_INLINE bool isHeatingHotend(uint8_t extruder) { return target_temperature[extruder] > current_temperature[extruder]; }
+FORCE_INLINE bool isHeatingHotend(uint8_t hotend) { return target_temperature[HOTEND_ARG] > current_temperature[HOTEND_ARG]; }
+
 FORCE_INLINE bool isHeatingBed() { return target_temperature_bed > current_temperature_bed; }
 
-FORCE_INLINE bool isCoolingHotend(uint8_t extruder) { return target_temperature[extruder] < current_temperature[extruder]; }
+FORCE_INLINE bool isCoolingHotend(uint8_t hotend) { return target_temperature[HOTEND_ARG] < current_temperature[HOTEND_ARG]; }
+
 FORCE_INLINE bool isCoolingBed() { return target_temperature_bed < current_temperature_bed; }
 
 #define HOTEND_ROUTINES(NR) \
@@ -121,17 +120,17 @@ FORCE_INLINE bool isCoolingBed() { return target_temperature_bed < current_tempe
   FORCE_INLINE bool isHeatingHotend##NR() { return isHeatingHotend(NR); } \
   FORCE_INLINE bool isCoolingHotend##NR() { return isCoolingHotend(NR); }
 HOTEND_ROUTINES(0);
-#if EXTRUDERS > 1
+#if HOTENDS > 1
   HOTEND_ROUTINES(1);
 #else
   #define setTargetHotend1(c) do{}while(0)
 #endif
-#if EXTRUDERS > 2
+#if HOTENDS > 2
   HOTEND_ROUTINES(2);
 #else
   #define setTargetHotend2(c) do{}while(0)
 #endif
-#if EXTRUDERS > 3
+#if HOTENDS > 3
   HOTEND_ROUTINES(3);
 #else
   #define setTargetHotend3(c) do{}while(0)
@@ -139,6 +138,7 @@ HOTEND_ROUTINES(0);
 
 int getHeaterPower(int heater);
 void disable_all_heaters();
+void setWatch();
 void updatePID();
 
 void PID_autotune(float temp, int extruder, int ncycles);
@@ -146,8 +146,12 @@ void PID_autotune(float temp, int extruder, int ncycles);
 void setExtruderAutoFanState(int pin, bool state);
 void checkExtruderAutoFans();
 
+#ifdef WATCH_TEMP_PERIOD
+  void start_watching_heater(int e=0);
+#endif
+
 FORCE_INLINE void autotempShutdown() {
-  #if ENABLED(AUTOTEMP)
+  #ifdef AUTOTEMP
     if (autotemp_enabled) {
       autotemp_enabled = false;
       if (degTargetHotend(active_extruder) > autotemp_min)
